@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
-// mongoose.connect("mongodb+srv://priyanshu:PRI123yan@cluster0.hwoestu.mongodb.net/Course-selling-app");
+
 
 const userSchema = new Schema({
     email: { type: String, unique: true },
