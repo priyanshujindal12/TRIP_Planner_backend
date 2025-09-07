@@ -2,8 +2,7 @@ const { Router } = require('express');
 const triprouter = Router();
 const { tripModel } = require('../db');
 const usermiddleware = require("../middleware/usermiddleware");
-const { z, success } = require("zod");
-const { tr } = require('zod/v4/locales');
+const { z } = require("zod");
 const tripSchema = z.object({
     title: z.string().min(3).max(100),
     from: z.string().min(3).max(100),
@@ -25,16 +24,6 @@ const joinTripSchema = z.object({
 });
 const cache = {};
 const GOOGLE_API_KEY = process.env.GOOGLE_PLACES_API_KEY
-
-// Test route for debugging
-triprouter.get("/test", (req, res) => {
-    res.json({ 
-        success: true, 
-        message: "Trip router is working",
-        timestamp: new Date().toISOString()
-    });
-});
-
 triprouter.get("/search-places", async (req, res) => {
     try {
         const city = req.query.city;
@@ -61,7 +50,7 @@ triprouter.get("/search-places", async (req, res) => {
             image: place.photos ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${place.photos[0].photo_reference}&key=${GOOGLE_API_KEY}` : null
         }));
 
-        // Save in cache (optional: add expiry logic if needed)
+      
         cache[city] = places;
 
         res.json({ success: true, places });
@@ -91,11 +80,7 @@ triprouter.post("/create", usermiddleware, async (req, res) => {
         }
         
         const { title, from, to, startDate, endDate, seats, image, pricePerPerson, phoneNo, modeOfTransport } = parsedData.data;
-        
-        // Clean phone number - remove any non-digit characters except +
         const cleanPhoneNo = phoneNo.replace(/[^\d+]/g, '');
-        
-        // Validate phone number length
         if (cleanPhoneNo.length < 10) {
             return res.status(400).json({ 
                 success: false, 
@@ -103,10 +88,6 @@ triprouter.post("/create", usermiddleware, async (req, res) => {
             });
         }
         
-        console.log('Parsed trip data:', parsedData.data);
-        console.log('Cleaned phone number:', cleanPhoneNo);
-
-        // Check for existing trip with same details
         const existingTrip = await tripModel.findOne({
             from,
             to,
@@ -129,7 +110,7 @@ triprouter.post("/create", usermiddleware, async (req, res) => {
             pricePerPerson,
             phoneNo: cleanPhoneNo,
             modeOfTransport: modeOfTransport || undefined,
-            createdBy: req.user.id // coming from middleware
+            createdBy: req.user.id 
         });
         
         console.log('Trip created successfully:', newTrip);
@@ -141,27 +122,7 @@ triprouter.post("/create", usermiddleware, async (req, res) => {
         res.status(500).json({ success: false, message: err.message });
     }
 });
-triprouter.get("/available", async (req, res) => {
-    try {
-        const trips = await tripModel.find({ 
-            status: { $in: ["upcoming", "ongoing"] } 
-        }).populate("createdBy", "email");
-        
-        const formatted = trips.map(trip => {
-            const bookedSeats = trip.bookings.reduce((sum, b) => sum + b.seatsBooked, 0);
-            return {
-                ...trip.toObject(),
-                availableSeats: trip.seats - bookedSeats
-            }
-        });
 
-        res.json(formatted);
-    }
-    catch (err) {
-        console.error('Error fetching available trips:', err);
-        res.status(500).json({ success: false, message: err.message });
-    }
-});
 
 triprouter.get("/all", usermiddleware, async (req, res) => {
     try {
@@ -224,24 +185,6 @@ triprouter.post("/:id/join", usermiddleware, async (req, res) => {
     catch (e) {
         console.error('Error joining trip:', e);
         res.status(500).json({ success: false, message: e.message });
-    }
-});
-triprouter.get("/user-trips", usermiddleware, async (req, res) => {
-    try {
-        const trips = await tripModel.find({ createdBy: req.user.id })
-            .populate("bookings.user", "email");
-        const formatted = trips.map(trip => {
-            const bookedSeats = trip.bookings.reduce((sum, b) => sum + b.seatsBooked, 0);
-            return {
-                ...trip.toObject(),
-                availableSeats: trip.seats - bookedSeats
-            };
-        });
-
-        res.json(formatted);
-    } catch (err) {
-        console.error('Error fetching user trips:', err);
-        res.status(500).json({ success: false, message: err.message });
     }
 });
 

@@ -4,14 +4,14 @@ const Schema = mongoose.Schema;
 
 const userSchema = new Schema({
     email: { type: String, unique: true },
-    password: String,
+    password: {type: String},
 });
 const userModel = mongoose.model("user", userSchema);
 
 const tripSchema = new Schema({
-    title: { type: String, required: true },       // Trip title
-    from: { type: String, required: true },        // Starting point
-    to: { type: String, required: true },          // Destination
+    title: { type: String, required: true },       
+    from: { type: String, required: true },        
+    to: { type: String, required: true },          
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     seats: { type: Number, required: true },
@@ -20,8 +20,8 @@ const tripSchema = new Schema({
     phoneNo: { type: String, required: true },
     modeOfTransport: { 
         type: String, 
-        enum: ["bus", "railway", "airplane", ""],  // Added "" to match Zod's allowance for empty string
-        required: false  // Changed to false to make optional, matching Zod
+        enum: ["bus", "railway", "airplane", ""],  
+        required: false  
     }, 
     createdBy: { type: Schema.Types.ObjectId, ref: "user", required: true },
     bookings: [{
@@ -38,13 +38,21 @@ const tripSchema = new Schema({
 
 tripSchema.pre("save", function(next) {
     const now = new Date();
+    
+    // Create date objects for comparison (only date, no time)
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startDate = new Date(this.startDate.getFullYear(), this.startDate.getMonth(), this.startDate.getDate());
+    const endDate = new Date(this.endDate.getFullYear(), this.endDate.getMonth(), this.endDate.getDate());
 
-    if (this.endDate < now) {
-        this.status = "completed";
-    } else if (this.startDate <= now && this.endDate >= now) {
-        this.status = "ongoing";
-    } else if (this.status !== "cancelled") {
-        this.status = "upcoming";
+    // Only update status if it's not already cancelled
+    if (this.status !== "cancelled") {
+        if (endDate < today) {
+            this.status = "completed";
+        } else if (startDate <= today && endDate >= today) {
+            this.status = "ongoing";
+        } else {
+            this.status = "upcoming";
+        }
     }
     next();
 });

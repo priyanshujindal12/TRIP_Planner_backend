@@ -13,10 +13,14 @@ app.use(express.json());
 app.use("/user", userRouter);
 app.use("/trips", triprouter);
 cron.schedule("0 0 * * *", async () => {
-    const trips = await tripModel.find();
-    for (let trip of trips) {
-        await trip.save(); 
-    console.log("Trip statuses updated at midnight");
+    try {
+        const trips = await tripModel.find();
+        for (let trip of trips) {
+            await trip.save(); 
+        }
+        console.log("Trip statuses updated at midnight");
+    } catch (error) {
+        console.error("Error updating trip statuses:", error);
     }
 });
 

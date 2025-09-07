@@ -28,7 +28,7 @@ userRouter.post('/signup', async function (req, res) {
             return res.status(409).json({ msg: "User already exists" }); // 409 Conflict
         }
         const hashedPassword = await bcrypt.hash(password, 5);
-        console.log(hashedPassword);
+        //console.log(hashedPassword);
         await userModel.create({
             email: email,
             password: hashedPassword,
