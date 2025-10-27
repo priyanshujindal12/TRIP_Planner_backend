@@ -14,13 +14,30 @@ app.use("/user", userRouter);
 app.use("/trips", triprouter);
 cron.schedule("0 0 * * *", async () => {
     try {
-        const trips = await tripModel.find();
-        for (let trip of trips) {
-            await trip.save(); 
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  
+      const trips = await tripModel.find();
+      for (const trip of trips) {
+        if (trip.status === "cancelled") continue; // skip cancelled ones
+  
+        const startDate = new Date(trip.startDate.getFullYear(), trip.startDate.getMonth(), trip.startDate.getDate());
+        const endDate = new Date(trip.endDate.getFullYear(), trip.endDate.getMonth(), trip.endDate.getDate());
+  
+        let newStatus = "upcoming";
+        if (endDate < today) newStatus = "completed";
+        else if (startDate <= today && endDate >= today) newStatus = "ongoing";
+  
+        // Only update if status changed
+        if (trip.status !== newStatus) {
+          trip.status = newStatus;
+          await trip.save();
         }
-        console.log("Trip statuses updated at midnight");
+      }
+  
+      console.log("✅ Trip statuses updated at midnight");
     } catch (error) {
-        console.error("Error updating trip statuses:", error);
+      console.error("❌ Error updating trip statuses:", error);
     }
 });
 
