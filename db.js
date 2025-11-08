@@ -1,12 +1,15 @@
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
-
 const userSchema = new Schema({
     email: { type: String, unique: true },
-    password: {type: String},
-});
+    password: { type: String },
+    isAdmin: { type: Boolean, default: false }
+  }, { timestamps: true });    
+
+
 const userModel = mongoose.model("user", userSchema);
+
 
 const tripSchema = new Schema({
     title: { type: String, required: true },       
@@ -24,6 +27,14 @@ const tripSchema = new Schema({
         required: false  
     }, 
     createdBy: { type: Schema.Types.ObjectId, ref: "user", required: true },
+     weather: [
+    {
+      date: String,
+      temp: Number,
+      description: String,
+      icon: String
+    }
+  ],
     bookings: [{
         user: { type: Schema.Types.ObjectId, ref: "user" },
         seatsBooked: { type: Number, required: true },

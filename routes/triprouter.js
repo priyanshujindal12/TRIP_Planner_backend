@@ -1,8 +1,10 @@
+const axios = require('axios');
 const { Router } = require('express');
 const triprouter = Router();
 const { tripModel } = require('../db');
 const usermiddleware = require("../middleware/usermiddleware");
 const { z } = require("zod");
+const { WEATHER_API_KEY } = require('../config')
 const tripSchema = z.object({
     title: z.string().min(3).max(100),
     from: z.string().min(3).max(100),
@@ -42,7 +44,7 @@ triprouter.get("/search-places", async (req, res) => {
             return res.status(404).json({ success: false, message: "No places found" });
         }
 
-        
+
         const places = data.results.slice(0, 10).map(place => ({
             name: place.name,
             address: place.formatted_address,
@@ -50,7 +52,7 @@ triprouter.get("/search-places", async (req, res) => {
             image: place.photos ? `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photoreference=${place.photos[0].photo_reference}&key=${GOOGLE_API_KEY}` : null
         }));
 
-      
+
         cache[city] = places;
 
         res.json({ success: true, places });
@@ -63,31 +65,24 @@ triprouter.get("/search-places", async (req, res) => {
 
 triprouter.post("/create", usermiddleware, async (req, res) => {
     try {
-        console.log('Received trip data:', req.body);
-        
         const parsedData = tripSchema.safeParse(req.body);
         if (!parsedData.success) {
             console.log('Validation errors:', parsedData.error.errors);
-            const errorMessages = parsedData.error.errors.map(err => {
-                const field = err.path.join('.');
-                return `${field}: ${err.message}`;
-            });
-            return res.status(400).json({ 
-                success: false, 
-                message: "Validation failed", 
-                errors: errorMessages
+            return res.status(400).json({
+                success: false,
+                message: "Validation failed",
             });
         }
-        
+
         const { title, from, to, startDate, endDate, seats, image, pricePerPerson, phoneNo, modeOfTransport } = parsedData.data;
         const cleanPhoneNo = phoneNo.replace(/[^\d+]/g, '');
         if (cleanPhoneNo.length < 10) {
-            return res.status(400).json({ 
-                success: false, 
-                message: "Phone number must be at least 10 digits long" 
+            return res.status(400).json({
+                success: false,
+                message: "Phone number must be at least 10 digits long"
             });
         }
-        
+
         const existingTrip = await tripModel.findOne({
             from,
             to,
@@ -99,6 +94,24 @@ triprouter.post("/create", usermiddleware, async (req, res) => {
         if (existingTrip) {
             return res.status(400).json({ success: false, message: "A trip with these exact details already exists" });
         }
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        const weatherRes = await axios.get(
+            `https://api.openweathermap.org/data/2.5/forecast?q=${to}&appid=${WEATHER_API_KEY}&units=metric`
+
+        );
+        const filteredForecast = weatherRes.data.list
+            .filter(item => {
+                const itemDate = new Date(item.dt_txt);
+                return itemDate >= start && itemDate <= end;
+            })
+            .map(item => ({
+                date: item.dt_txt,
+                temp: item.main.temp,
+                description: item.weather[0].description,
+                icon: item.weather[0].icon
+            }));
+
         const newTrip = await tripModel.create({
             title,
             from,
@@ -110,9 +123,10 @@ triprouter.post("/create", usermiddleware, async (req, res) => {
             pricePerPerson,
             phoneNo: cleanPhoneNo,
             modeOfTransport: modeOfTransport || undefined,
-            createdBy: req.user.id 
+            createdBy: req.user.id,
+            weather: filteredForecast
         });
-        
+
         console.log('Trip created successfully:', newTrip);
         res.json({ success: true, trip: newTrip });
 
@@ -153,33 +167,33 @@ triprouter.post("/:id/join", usermiddleware, async (req, res) => {
         const { seatsBooked } = parsedData.data;
         const tripId = req.params.id;
         const userId = req.user.id;
-        
+
         const trip = await tripModel.findById(tripId);
         if (!trip) {
             return res.status(404).json({ success: false, message: "Trip not found" });
         }
-        
+
         if (trip.status === "completed" || trip.status === "cancelled" || trip.status === "ongoing") {
             return res.status(400).json({ success: false, message: "This trip is no longer available to join" });
         }
-        
+
         if (trip.createdBy.toString() === userId) {
             return res.status(400).json({ success: false, message: "You cannot join your own trip" });
         }
-        
+
         const alreadyJoined = trip.bookings.some(booking => booking.user.toString() === userId);
         if (alreadyJoined) {
             return res.status(400).json({ success: false, message: "You have already joined this trip" });
         }
-        
+
         const alreadybooked = trip.bookings.reduce((sum, b) => sum + b.seatsBooked, 0);
         if (alreadybooked + seatsBooked > trip.seats) {
             return res.status(400).json({ success: false, message: "Not enough seats available" });
         }
-        
+
         trip.bookings.push({ user: userId, seatsBooked, status: "pending" });
         await trip.save();
-        
+
         res.json({ success: true, message: "Joined trip successfully", trip });
     }
     catch (e) {

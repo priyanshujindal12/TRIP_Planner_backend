@@ -34,7 +34,7 @@ userRouter.post('/signup', async function (req, res) {
             password: hashedPassword,
         })
     } catch (e) {
-        console.log(e);
+        
         res.json({
             msg: "user already exit"
         })
@@ -47,35 +47,43 @@ userRouter.post('/signup', async function (req, res) {
     }
 });
 userRouter.post('/signin', async function (req, res) {
+
     const { email, password } = req.body;
-    const response = await userModel.findOne({
-        email: email,
+    try {
+        const response = await userModel.findOne({
+            email: email,
 
-    })
-    if (!response) {
-        res.status(404).json({
-            msg: "user does not exist"
         })
+        if (!response) {
+           return  res.status(404).json({
+                msg: "user does not exist"
+            })
+        }
+
+        const passwordmatch = await bcrypt.compare(password, response.password);
+
+        if (passwordmatch) {
+            const token = jwt.sign({
+                id: response._id.toString(), email: response.email, isAdmin: response.isAdmin
+            }, JWT_SECRET, { expiresIn: "1h" });
+            res.json({
+                token: token
+            })
+
+
+
+        }
+        else {
+            res.status(404).json({
+                msg: "your credentials are wrong"
+            })
+        }
+
+    } catch (error) {
+        res.status(404).json("something wrong");
+
     }
 
-    const passwordmatch = await bcrypt.compare(password, response.password);
-
-    if (passwordmatch) {
-        const token = jwt.sign({
-            id: response._id.toString(), email: response.email
-        }, JWT_SECRET, { expiresIn: "1h" });
-        res.json({
-            token: token
-        })
-
-
-
-    }
-    else {
-        res.status(404).json({
-            msg: "your credentials are wrong"
-        })
-    }
 });
 userRouter.get("/dashboard-data", usermiddleware, (req, res) => {
     res.json({ email: req.user.email, message: `Welcome ${req.user.email}`, data: "This is protected info" });
