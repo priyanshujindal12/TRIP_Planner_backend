@@ -7,6 +7,7 @@ const {tripModel}=require("./db");
 const { userRouter }=require("./routes/user");
 const {triprouter}=require("./routes/triprouter")
 const {adminRouter}=require("./routes/admin");
+const paymentRouter = require("./routes/paymentRouter");
 const cors=require('cors');
 const cron = require("node-cron");
 app.use(cors());
@@ -14,6 +15,9 @@ app.use(express.json());
 app.use("/user", userRouter);
 app.use("/trips", triprouter);
 app.use("/admin", adminRouter);
+
+app.use("/payment", paymentRouter);
+
 cron.schedule("0 0 * * *", async () => {
     try {
       const now = new Date();
