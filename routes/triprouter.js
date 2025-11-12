@@ -205,7 +205,8 @@ triprouter.post("/:id/join", usermiddleware, async (req, res) => {
 triprouter.get("/my-trips", usermiddleware, async (req, res) => {
     try {
         const trips = await tripModel.find({ createdBy: req.user.id })
-            .populate("bookings.user", "email");
+            .populate("bookings.user", "email")
+            .populate("createdBy", "email");
         const formatted = trips.map(trip => {
             const bookedSeats = trip.bookings.reduce((sum, b) => sum + b.seatsBooked, 0);
             return {
@@ -220,36 +221,65 @@ triprouter.get("/my-trips", usermiddleware, async (req, res) => {
     }
 });
 triprouter.get("/my-booking", usermiddleware, async (req, res) => {
-    try {
-        const userId = req.user.id;
-        const trips = await tripModel.find({ "bookings.user": userId })
-            .populate("createdBy", "email")
-            .populate("bookings.user", "email");
-        const now = new Date();
-        const formatted = trips.map(trip => {
-            const bookedSeats = trip.bookings.reduce((sum, b) => sum + b.seatsBooked, 0);
-            const userBooking = trip.bookings.find(b => b.user._id.toString() === userId);
-            const daysLeft = Math.ceil((new Date(trip.startDate) - now) / (1000 * 60 * 60 * 24));
-            return {
-                ...trip.toObject(),
-                availableSeats: trip.seats - bookedSeats,
-                mySeatsBooked: userBooking ? userBooking.seatsBooked : 0,
-                daysLeft: daysLeft > 0 ? daysLeft : 0,
-                isUpcoming: daysLeft > 0 && trip.status !== "cancelled",
-                isPast: trip.endDate < now || trip.status === "completed",
-                isCancelled: trip.status === "cancelled"
-            };
+  try {
+    const userId = req.user.id;
+    const trips = await tripModel
+      .find({ "bookings.user": userId })
+      .populate("createdBy", "email")
+      .populate("bookings.user", "email");
 
+    const now = new Date();
+
+    // Flatten the user's bookings
+    const formatted = trips.flatMap((trip) => {
+      return trip.bookings
+        .filter((b) => b.user._id.toString() === userId)
+        .map((userBooking) => {
+          const bookedSeats = trip.bookings.reduce((sum, b) => sum + b.seatsBooked, 0);
+          const availableSeats = trip.seats - bookedSeats;
+          const daysLeft = Math.ceil(
+            (new Date(trip.startDate) - now) / (1000 * 60 * 60 * 24)
+          );
+
+          return {
+            _id: userBooking._id, // booking ID
+            tripId: trip._id,
+            title: trip.title,
+            from: trip.from,
+            to: trip.to,
+            startDate: trip.startDate,
+            endDate: trip.endDate,
+            image: trip.image,
+            modeOfTransport: trip.modeOfTransport,
+            createdBy: trip.createdBy,
+            pricePerPerson: trip.pricePerPerson,
+            availableSeats,
+            mySeatsBooked: userBooking.seatsBooked,
+            daysLeft: daysLeft > 0 ? daysLeft : 0,
+            status: userBooking.status, // ✅ fix here
+            isUpcoming:
+              userBooking.status === "accepted" &&
+              daysLeft > 0 &&
+              trip.status !== "cancelled",
+            isPast:
+              trip.endDate < now ||
+              trip.status === "completed" ||
+              userBooking.status === "completed",
+            isCancelled:
+              trip.status === "cancelled" ||
+              userBooking.status === "cancelled" ||
+              userBooking.status === "rejected",
+          };
         });
-        res.json({ success: true, bookings: formatted });
+    });
 
-
-    } catch (error) {
-        res.status(500).json({ success: false, message: error.message });
-
-    }
-
+    res.json({ success: true, bookings: formatted });
+  } catch (error) {
+    console.error("Error in /my-booking:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
 });
+
 triprouter.post("/:id/cancel", usermiddleware, async (req, res) => {
     try {
         const tripId = req.params.id;
