@@ -258,9 +258,9 @@ triprouter.get("/my-booking", usermiddleware, async (req, res) => {
             daysLeft: daysLeft > 0 ? daysLeft : 0,
             status: userBooking.status, // ✅ fix here
             isUpcoming:
-              userBooking.status === "accepted" &&
-              daysLeft > 0 &&
-              trip.status !== "cancelled",
+    daysLeft > 0 &&
+    trip.status === "upcoming",
+
             isPast:
               trip.endDate < now ||
               trip.status === "completed" ||
