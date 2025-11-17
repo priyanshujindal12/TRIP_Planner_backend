@@ -341,31 +341,63 @@ triprouter.post("/:id/booking/:bookingId/accept", usermiddleware, async (req, re
         const tripId = req.params.id;
         const bookingId = req.params.bookingId;
         const userId = req.user.id;
-        const trip = await tripModel.findById(tripId);
+
+        // IMPORTANT: populate bookings.user so we get the email
+        const trip = await tripModel
+            .findById(tripId)
+            .populate("bookings.user", "email");
+
         if (!trip) {
             return res.status(404).json({ success: false, message: "Trip not found" });
+        }
 
-        }
         if (trip.createdBy.toString() !== userId) {
-            return res.status(403).json({ success: false, message: "only trip creator can accept booking" })
+            return res.status(403).json({ success: false, message: "Only trip creator can accept booking" });
         }
+
         const booking = trip.bookings.id(bookingId);
         if (!booking) {
-            return res.status(400).json({ success: false, message: "booking not found" });
+            return res.status(400).json({ success: false, message: "Booking not found" });
+        }
 
-        }
-        if (booking.status !== "pending") {
-            return res.status(400).json({ success: false, message: "booooking  is not pending" });
-        }
+        // Update status
         booking.status = "accepted";
         await trip.save();
-        res.json({ success: true, message: "Booking accepted", trip });
+
+        // FIXED: correct file path & case
+        console.log("REQUEST came");
+        const sendMail = require("../utils/sendmail")
+        console.log("request came");
+        // FIXED: booking.user.email now exists because of populate()
+        const userEmail = booking.user.email;
+
+        const subject = "Your Trip Booking Has Been Accepted! 🎉";
+
+        const html = `
+            <h2>Great News! 🎉</h2>
+            <p>Your booking for the trip <strong>${trip.title}</strong> has been accepted.</p>
+            <p><b>Trip Details:</b></p>
+            <ul>
+                <li>From: ${trip.from}</li>
+                <li>To: ${trip.to}</li>
+                <li>Start Date: ${new Date(trip.startDate).toDateString()}</li>
+                <li>End Date: ${new Date(trip.endDate).toDateString()}</li>
+                <li>Seats Booked: ${booking.seatsBooked}</li>
+            </ul>
+            <p>Have a safe journey! ✈️</p>
+        `;
+
+        await sendMail(userEmail, subject, html);
+        console.log("📩 Email sent to:", userEmail);
+
+        res.json({ success: true, message: "Booking accepted & Email sent successfully!", trip });
+
     } catch (error) {
+        console.error("❌ Accept booking error:", error);
         return res.status(500).json({ success: false, message: error.message });
-
-
     }
 });
+
 triprouter.post("/:id/bookings/:bookingId/reject", usermiddleware, async (req, res) => {
     try {
         const tripId = req.params.id;
