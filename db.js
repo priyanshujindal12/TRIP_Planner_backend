@@ -49,13 +49,9 @@ const tripSchema = new Schema({
 
 tripSchema.pre("save", function(next) {
     const now = new Date();
-    
-    // Create date objects for comparison (only date, no time)
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const startDate = new Date(this.startDate.getFullYear(), this.startDate.getMonth(), this.startDate.getDate());
     const endDate = new Date(this.endDate.getFullYear(), this.endDate.getMonth(), this.endDate.getDate());
-
-    // Only update status if it's not already cancelled
     if (this.status !== "cancelled") {
         if (endDate < today) {
             this.status = "completed";
