@@ -23,7 +23,7 @@ const tripSchema = new Schema({
     phoneNo: { type: String, required: true },
     modeOfTransport: { 
         type: String, 
-        enum: ["bus", "railway", "airplane", ""],  
+        enum: ["bus", "railway", "airplane", "car"],  
         required: false  
     }, 
     createdBy: { type: Schema.Types.ObjectId, ref: "user", required: true },

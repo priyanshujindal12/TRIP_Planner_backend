@@ -64,6 +64,7 @@ triprouter.get("/search-places", async (req, res) => {
 });
 
 triprouter.post("/create", usermiddleware, async (req, res) => {
+    console.log("request came");
     try {
         const parsedData = tripSchema.safeParse(req.body);
         if (!parsedData.success) {
@@ -96,21 +97,29 @@ triprouter.post("/create", usermiddleware, async (req, res) => {
         }
         const start = new Date(startDate);
         const end = new Date(endDate);
-        const weatherRes = await axios.get(
-            `https://api.openweathermap.org/data/2.5/forecast?q=${to}&appid=${WEATHER_API_KEY}&units=metric`
+        let filteredForecast = [];
+        try {
+            const weatherRes = await axios.get(
+                `https://api.openweathermap.org/data/2.5/forecast?q=${to}&appid=${WEATHER_API_KEY}&units=metric`
+            );
 
-        );
-        const filteredForecast = weatherRes.data.list
-            .filter(item => {
-                const itemDate = new Date(item.dt_txt);
-                return itemDate >= start && itemDate <= end;
-            })
-            .map(item => ({
-                date: item.dt_txt,
-                temp: item.main.temp,
-                description: item.weather[0].description,
-                icon: item.weather[0].icon
-            }));
+            filteredForecast = weatherRes.data.list
+                .filter(item => {
+                    const itemDate = new Date(item.dt_txt);
+                    return itemDate >= start && itemDate <= end;
+                })
+                .map(item => ({
+                    date: item.dt_txt,
+                    temp: item.main.temp,
+                    description: item.weather[0].description,
+                    icon: item.weather[0].icon
+                }));
+
+        } catch (e) {
+            console.log("Weather API failed:", e.response?.data || e.message);
+            // Continue without weather instead of crashing
+            filteredForecast = [];
+        }
 
         const newTrip = await tripModel.create({
             title,
@@ -221,63 +230,63 @@ triprouter.get("/my-trips", usermiddleware, async (req, res) => {
     }
 });
 triprouter.get("/my-booking", usermiddleware, async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const trips = await tripModel
-      .find({ "bookings.user": userId })
-      .populate("createdBy", "email")
-      .populate("bookings.user", "email");
+    try {
+        const userId = req.user.id;
+        const trips = await tripModel
+            .find({ "bookings.user": userId })
+            .populate("createdBy", "email")
+            .populate("bookings.user", "email");
 
-    const now = new Date();
+        const now = new Date();
 
-    // Flatten the user's bookings
-    const formatted = trips.flatMap((trip) => {
-      return trip.bookings
-        .filter((b) => b.user._id.toString() === userId)
-        .map((userBooking) => {
-          const bookedSeats = trip.bookings.reduce((sum, b) => sum + b.seatsBooked, 0);
-          const availableSeats = trip.seats - bookedSeats;
-          const daysLeft = Math.ceil(
-            (new Date(trip.startDate) - now) / (1000 * 60 * 60 * 24)
-          );
+        // Flatten the user's bookings
+        const formatted = trips.flatMap((trip) => {
+            return trip.bookings
+                .filter((b) => b.user._id.toString() === userId)
+                .map((userBooking) => {
+                    const bookedSeats = trip.bookings.reduce((sum, b) => sum + b.seatsBooked, 0);
+                    const availableSeats = trip.seats - bookedSeats;
+                    const daysLeft = Math.ceil(
+                        (new Date(trip.startDate) - now) / (1000 * 60 * 60 * 24)
+                    );
 
-          return {
-            _id: userBooking._id, // booking ID
-            tripId: trip._id,
-            title: trip.title,
-            from: trip.from,
-            to: trip.to,
-            startDate: trip.startDate,
-            endDate: trip.endDate,
-            image: trip.image,
-            modeOfTransport: trip.modeOfTransport,
-            createdBy: trip.createdBy,
-            pricePerPerson: trip.pricePerPerson,
-            availableSeats,
-            mySeatsBooked: userBooking.seatsBooked,
-            daysLeft: daysLeft > 0 ? daysLeft : 0,
-            status: userBooking.status, // ✅ fix here
-            isUpcoming:
-    daysLeft > 0 &&
-    trip.status === "upcoming",
+                    return {
+                        _id: userBooking._id, // booking ID
+                        tripId: trip._id,
+                        title: trip.title,
+                        from: trip.from,
+                        to: trip.to,
+                        startDate: trip.startDate,
+                        endDate: trip.endDate,
+                        image: trip.image,
+                        modeOfTransport: trip.modeOfTransport,
+                        createdBy: trip.createdBy,
+                        pricePerPerson: trip.pricePerPerson,
+                        availableSeats,
+                        mySeatsBooked: userBooking.seatsBooked,
+                        daysLeft: daysLeft > 0 ? daysLeft : 0,
+                        status: userBooking.status, // ✅ fix here
+                        isUpcoming:
+                            daysLeft > 0 &&
+                            trip.status === "upcoming",
 
-            isPast:
-              trip.endDate < now ||
-              trip.status === "completed" ||
-              userBooking.status === "completed",
-            isCancelled:
-              trip.status === "cancelled" ||
-              userBooking.status === "cancelled" ||
-              userBooking.status === "rejected",
-          };
+                        isPast:
+                            trip.endDate < now ||
+                            trip.status === "completed" ||
+                            userBooking.status === "completed",
+                        isCancelled:
+                            trip.status === "cancelled" ||
+                            userBooking.status === "cancelled" ||
+                            userBooking.status === "rejected",
+                    };
+                });
         });
-    });
 
-    res.json({ success: true, bookings: formatted });
-  } catch (error) {
-    console.error("Error in /my-booking:", error);
-    res.status(500).json({ success: false, message: error.message });
-  }
+        res.json({ success: true, bookings: formatted });
+    } catch (error) {
+        console.error("Error in /my-booking:", error);
+        res.status(500).json({ success: false, message: error.message });
+    }
 });
 
 triprouter.post("/:id/cancel", usermiddleware, async (req, res) => {
